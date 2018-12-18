@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+.DS_Store
+
 # C extensions
 *.so
 
@@ -56,3 +58,24 @@ docs/_build/
 
 # PyBuilder
 target/
+asn1crypto*
+boto*
+certifi*
+cffi*
+chardet*
+cryptography*
+enum*
+idna*
+ipaddress*
+jwt*
+mail_parser*
+mailparser*
+*OpenSSL*
+pycparser*
+PyJWT*
+pytz*
+requests*
+simplejson*
+six*
+twilio*
+urllib3*
