@@ -15,3 +15,4 @@
  4. Create an email on SES
  5. Create an email rule to dump received emails to an S3 bucket
  6. Create an S3 put object event that will trigger the lambda function
+ 7. Zip up the contents of this repo and upload to Lambda
