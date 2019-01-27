@@ -22,7 +22,7 @@ def get_image_from_received_motion_alert(bucket, key):
 	return attachment
 
 def get_detected_face(received_image):
-	detected = 'A person'
+	detected = 'An unknown object'
 	
 	try:
 		response = rekognition_client.search_faces_by_image(CollectionId = collection_id, Image = {
@@ -48,13 +48,14 @@ def get_detected_face(received_image):
 		
 		if len(labels) > 0:
 			labels = ', and a '.join(labels)
-			detected = detected.replace('person', labels)
+			detected = 'A ' + labels
 		
 	return detected
 
 
 def send_sms_notification(body):
 	results = []
+	
 	for number in phone_numbers:
 		message = twilio_client.messages.create(to = number.strip(), from_ = twilio_number, body = body)
 		results.append({
