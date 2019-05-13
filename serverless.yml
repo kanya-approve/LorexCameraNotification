@@ -1,0 +1,147 @@
+service: MotionDetected
+
+custom:
+  smsRecipients: ${opt:smsRecipients}
+  twilioNumber: ${opt:twilioNumber}
+  twilioAccountSid: ${opt:twilioAccountSid}
+  twilioAuthToken: ${opt:twilioAuthToken}
+  domain: ${opt:domain}
+  domainPath: ${opt:domainPath}
+  facesCollectionId: ${opt:facesCollectionId, 'OurFaces'}
+  s3fsUser: ${opt:s3fsUser, 'S3FSUser'}
+  pythonRequirements:
+    dockerizePip: non-linux
+
+provider:
+  name: aws
+  runtime: python3.7
+  region: ${opt:region, 'us-east-1'}
+  timeout: 30
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 's3:GetObject'
+      Resource:
+        - !GetAtt MotionBucket.Arn
+        - !Join
+          - '/'
+          - - !GetAtt MotionBucket.Arn
+            - '*'
+        - !GetAtt FacesToIndexBucket.Arn
+        - !Join
+          - '/'
+          - - !GetAtt FacesToIndexBucket.Arn
+            - '*'
+    - Effect: 'Allow'
+      Action:
+        - 's3:PutObject'
+      Resource:
+        - 'arn:aws:s3:::${self:custom.domain}'
+        - 'arn:aws:s3:::${self:custom.domain}/*'
+    - Effect: 'Allow'
+      Action:
+        - 'sns:Publish'
+      Resource:
+        - !Ref MotionNotification
+    - Effect: 'Allow'
+      Action:
+        - 'rekognition:DetectLabels'
+        - 'rekognition:CreateCollection'
+      Resource: '*'
+    - Effect: 'Allow'
+      Action:
+        - 'rekognition:IndexFaces'
+        - 'rekognition:SearchFacesByImage'
+      Resource:
+        - 'arn:aws:rekognition:${self:provider.region}:#{AWS::AccountId}:collection/${self:custom.facesCollectionId}'
+
+functions:
+  SendNotification:
+    handler: send_notification.execute
+    description: Attempts to identify face(s)/label(s) of object(s) detected in received S3 image >
+      and send out a notification to sms if it's a person or email if it's an object
+    environment:
+      SMS_RECIPIENTS: ${self:custom.smsRecipients}
+      TWILIO_AUTH_TOKEN: ${self:custom.twilioAuthToken}
+      TWILIO_ACCOUNT_SID: ${self:custom.twilioAccountSid}
+      TWILIO_PHONE_NUMBER: ${self:custom.twilioNumber}
+      REKOGNITION_COLLECTION_ID: ${self:custom.facesCollectionId}
+      EMAIL_NOTIFICATION_ARN: !Ref MotionNotification
+      SITE_URL: ${self:custom.domain}
+      SITE_IMAGE_PATH: ${self:custom.domainPath}
+    events:
+      - cloudwatchEvent:
+        event:
+          source:
+            - aws.s3
+          detail-type:
+            - AWS API Call via CloudTrail
+          detail:
+            eventSource:
+              - s3.amazonaws.com
+            eventName:
+              - PutObject
+            requestParameters:
+              bucketName:
+                - !Ref MotionBucket
+  IndexFaces:
+    handler: index_faces.execute
+    description: Index faces found in pictures dropped in faces to index s3 bucket
+    environment:
+      REKOGNITION_COLLECTION_ID: ${self:custom.facesCollectionId}
+      FACES_TO_INDEX_BUCKET: !Ref FacesToIndexBucket
+    events:
+      - schedule: cron(0 5 * * ? *)
+
+resources:
+  Resources:
+    MotionBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        LifecycleConfiguration:
+          Rules:
+            - AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+              ExpirationInDays: 30
+              Status: Enabled
+
+    FacesToIndexBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        LifecycleConfiguration:
+          Rules:
+            - AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+              ExpirationInDays: 30
+              Status: Enabled
+
+    S3FSUser:
+      Type: AWS::IAM::User
+      Properties:
+        UserName: ${self:custom.s3fsUser}
+        Policies:
+          - PolicyName: MotionDetectedBucketAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: 'Allow'
+                  Action:
+                    - s3:ListBucket
+                    - s3:DeleteObject
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:RestoreObject
+                  Resource:
+                    - !GetAtt MotionBucket.Arn
+                    - !Join
+                      - '/'
+                      - - !GetAtt MotionBucket.Arn
+                        - '*'
+
+    MotionNotification:
+      Type: AWS::SNS::Topic
+
+plugins:
+  - serverless-python-requirements
+  - serverless-pseudo-parameters
+  
