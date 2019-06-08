@@ -18,7 +18,7 @@ twilio_client = Client()
 
 current_time = str(time.time())
 
-sentence_end = "detected by the front door camera."
+sentence_end = "detected by a camera."
 
 
 def get_image_from_received_motion_alert(bucket, key):
